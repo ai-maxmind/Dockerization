@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  oracle-master:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: oracle-master
+    environment:
+      - ORACLE_PWD={ORACLE_PASSWORD}
+      - ORACLE_SID={ORACLE_SID}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-master-data:/opt/oracle/oradata
+    networks:
+      - oracle-net
+
+  oracle-slave-1:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: oracle-slave-1
+    environment:
+      - ORACLE_PWD={ORACLE_PASSWORD}
+      - ORACLE_SID={ORACLE_SID}
+    ports:
+      - "1522:1521"
+    volumes:
+      - oracle-slave-1-data:/opt/oracle/oradata
+    depends_on:
+      - oracle-master
+    networks:
+      - oracle-net
+
+  oracle-slave-2:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: oracle-slave-2
+    environment:
+      - ORACLE_PWD={ORACLE_PASSWORD}
+      - ORACLE_SID={ORACLE_SID}
+    ports:
+      - "1523:1521"
+    volumes:
+      - oracle-slave-2-data:/opt/oracle/oradata
+    depends_on:
+      - oracle-master
+    networks:
+      - oracle-net
+
+volumes:
+  oracle-master-data:
+  oracle-slave-1-data:
+  oracle-slave-2-data:
+
+networks:
+  oracle-net:
+    driver: bridge
