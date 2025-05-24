@@ -1,12 +1,13 @@
 version: '3.8'
 x-airflow-common:
   &airflow-common
-  build: 
-    context: .
-    args:
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      NO_PROXY: ${NO_PROXY}
+  # build: 
+  #   context: .
+  #   args:
+  #     http_proxy: ${http_proxy}
+  #     https_proxy: ${https_proxy}
+  #     NO_PROXY: ${NO_PROXY}
+  image: airflow-proxy-image
   env_file:
     - .env
   environment:

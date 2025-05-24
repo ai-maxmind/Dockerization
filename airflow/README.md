@@ -1,6 +1,11 @@
 # AIRFLOW 
 
 + Tạo thư mục lưu trữ log, plugin, file download, dag: `mkdir ./dags ./plugins ./logs ./downloads`. Trên Linux, cần thiết lập group id = 0. Nếu không, các tệp được tạo trong dags, plugins và logs sẽ được tạo bằng người dùng root: `echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0" > .env`
++ Dùng lệnh sau để build, truyền `.env` vào `--build-arg`:
+```bash
+export $(cat .env | xargs) && \
+docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t airflow-proxy-image .
+```
 + Run: `docker-compose up airflow-init` để cài đặt và khởi tạo csdl postgresql, redis.
 
 ![](./images/airflow-init.png)
