@@ -1,0 +1,46 @@
+http:
+  middlewares:
+    # Redirect tất cả HTTP sang HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    auth:
+      basicAuth:
+        users:
+          - "${TRAEFIK_BASIC_AUTH}" 
+    rate-limit:
+      rateLimit:
+        average: 50
+        burst: 100
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customResponseHeaders:
+          X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex"
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        referrerPolicy: "no-referrer"
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; object-src 'none';"
+
+  routers:
+    n8n-router:
+      rule: "Host(`${N8N_HOST}`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - auth
+        - rate-limit
+        - security-headers
+      service: n8n-service
+      tls:
+        certResolver: myresolver
+
+  services:
+    n8n-service:
+      loadBalancer:
+        servers:
+          - url: "http://n8n:5678"
