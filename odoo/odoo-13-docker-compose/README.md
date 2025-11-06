@@ -7,7 +7,7 @@ Installing Odoo 13 with one command.
 Install [docker](https://docs.docker.com/get-docker/) and [docker-compose](https://docs.docker.com/compose/install/) yourself, then run:
 
 ``` bash
-curl -s https://raw.githubusercontent.com/codedeep79/odoo-docker-compose/refs/heads/main/odoo-13-docker-compose/run.sh | sudo bash -s odoo-one 10013 20013
+curl -s https://raw.githubusercontent.com/ai-maxmind/Dockerization/refs/heads/main/odoo/odoo-13-docker-compose/run.sh | sudo bash -s odoo-one 10013 20013
 ```
 
 to set up first Odoo instance @ `localhost:10013` (default master password: `admin`)
@@ -15,7 +15,7 @@ to set up first Odoo instance @ `localhost:10013` (default master password: `adm
 and
 
 ``` bash
-curl -s https://raw.githubusercontent.com/codedeep79/odoo-docker-compose/refs/heads/main/odoo-13-docker-compose/run.sh | sudo bash -s odoo-two 11013 21013
+curl -s https://raw.githubusercontent.com/ai-maxmind/Dockerization/refs/heads/main/odoo/odoo-13-docker-compose/run.sh | sudo bash -s odoo-two 11013 21013
 ```
 
 to set up another Odoo instance @ `localhost:11013` (default master password: `admin`)
@@ -56,8 +56,8 @@ docker-compose up -d
 **If you get the permission issue**, change the folder permission to make sure that the container is able to access the directory:
 
 ``` sh
-$ git clone https://github.com/codedeep79/odoo-docker-compose.git
-$ cd odoo-13-docker-compose
+$ git clone https://github.com/ai-maxmind/Dockerization.git
+$ cd odoo/odoo-13-docker-compose
 $ sudo chmod -R 777 addons
 $ sudo chmod -R 777 etc
 $ mkdir -p postgresql
