@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Airflow metadata & logs
+airflow.db
+airflow.cfg
+webserver_config.py
+logs/
+logs/*
+
+# Environment and config
+.env
+.env.*
+*.env
+*.local
+*.ini
+secrets/
+config/*.local
+config/*.env
+
+# Docker
+docker-compose.override.yml
+*.pid
+
+# PyCharm / VSCode / Editor folders
+.idea/
+.vscode/
+*.swp
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# macOS
+.DS_Store
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Airflow volume mounts
+dags/__pycache__/
+plugins/__pycache__/
+
+# SQLite DB (if used for local testing)
+*.sqlite
+*.sqlite3
+
+# Airflow initialized data
+downloads/
+download/
