@@ -1,55 +1,72 @@
 #!/bin/bash
-DESTINATION=$1
-PORT=$2
-CHAT=$3
+set -euo pipefail
 
-# Clone Odoo directory
-git clone --depth=1 https://github.com/codedeep79/odoo-17-docker-compose $DESTINATION
-rm -rf $DESTINATION/.git
+DESTINATION=${1:-}
+PORT=${2:-}
+CHAT=${3:-}
 
-# Create PostgreSQL directory
-mkdir -p $DESTINATION/postgresql
+if [ -z "$DESTINATION" ] || [ -z "$PORT" ] || [ -z "$CHAT" ]; then
+  echo "Usage: $0 <destination_folder> <port> <chat_port>"
+  exit 1
+fi
 
-# Change ownership to current user and set restrictive permissions for security
-sudo chown -R $USER:$USER $DESTINATION
-sudo chmod -R 700 $DESTINATION  # Only the user has access
+if ! command -v git &> /dev/null; then
+  echo "Git not found! Please install Git >= 2.25."
+  exit 1
+fi
 
-# Check if running on macOS
+GIT_VERSION=$(git --version | awk '{print $3}')
+if [[ $(echo "$GIT_VERSION < 2.25" | bc) -eq 1 ]]; then
+  echo "Git version must be >= 2.25 for sparse-checkout."
+  exit 1
+fi
+
+git init "$DESTINATION"
+cd "$DESTINATION"
+
+git remote add -f origin https://github.com/ai-maxmind/Dockerization.git
+
+git sparse-checkout init --cone
+git sparse-checkout set odoo/odoo-17-docker-compose
+
+git pull origin main
+
+mv odoo/odoo-17-docker-compose/* .
+rm -rf odoo
+
+mkdir -p postgresql
+sudo chown -R "$USER:$USER" "$DESTINATION"
+sudo chmod -R 700 postgresql
+
+
+if [ ! -f docker-compose.yml ]; then
+  echo "docker-compose.yml not found!"
+  exit 1
+fi
+cp docker-compose.yml docker-compose.yml.bak
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Running on macOS. Skipping inotify configuration."
+  sed -i '' "s/10019/$PORT/g; s/20019/$CHAT/g" docker-compose.yml
 else
-  # System configuration
-  if grep -qF "fs.inotify.max_user_watches" /etc/sysctl.conf; then
-    echo $(grep -F "fs.inotify.max_user_watches" /etc/sysctl.conf)
-  else
-    echo "fs.inotify.max_user_watches = 524288" | sudo tee -a /etc/sysctl.conf
-  fi
-  sudo sysctl -p
+  sed -i "s/10019/$PORT/g; s/20019/$CHAT/g" docker-compose.yml
 fi
 
-# Set ports in docker-compose.yml
-# Update docker-compose configuration
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS sed syntax
-  sed -i '' 's/10017/'$PORT'/g' $DESTINATION/docker-compose.yml
-  sed -i '' 's/20017/'$CHAT'/g' $DESTINATION/docker-compose.yml
-else
-  # Linux sed syntax
-  sed -i 's/10017/'$PORT'/g' $DESTINATION/docker-compose.yml
-  sed -i 's/20017/'$CHAT'/g' $DESTINATION/docker-compose.yml
+find . -type f -exec chmod 644 {} \;
+find . -type d -exec chmod 755 {} \;
+
+[ -f entrypoint.sh ] && chmod +x entrypoint.sh
+
+if ! command -v docker &> /dev/null; then
+  echo "Docker not found! Please install Docker."
+  exit 1
 fi
 
-# Set file and directory permissions after installation
-find $DESTINATION -type f -exec chmod 644 {} \;
-find $DESTINATION -type d -exec chmod 755 {} \;
-
-chmod +x $DESTINATION/entrypoint.sh
-
-# Run Odoo
-if ! is_present="$(type -p "docker-compose")" || [[ -z $is_present ]]; then
-  docker compose -f $DESTINATION/docker-compose.yml up -d
+if command -v docker-compose &> /dev/null; then
+  DOCKER_COMPOSE_CMD="docker-compose"
 else
-  docker-compose -f $DESTINATION/docker-compose.yml up -d
+  DOCKER_COMPOSE_CMD="docker compose"
 fi
+
+$DOCKER_COMPOSE_CMD -f docker-compose.yml up -d
 
 echo "Odoo started at http://localhost:$PORT | Master Password: admin | Live chat port: $CHAT"
