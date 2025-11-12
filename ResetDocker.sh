@@ -75,19 +75,111 @@ UninstallDocker() {
 }
 
 InstallDocker() {
-    echo -e "\n📦 Installing Docker..."
-    if command -v docker >/dev/null 2>&1; then
-        echo "Docker is already installed."
-        return
+    echo -e "\n📦 Installing Docker (stable, pinned versions)..."
+    if command -v lsb_release >/dev/null 2>&1; then
+        CODENAME="$(lsb_release -cs)"
+    else
+        CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+    fi
+    echo "🔎 Detected Ubuntu codename: ${CODENAME:-unknown}"
+    echo "🔐 Adding official Docker apt repo..."
+    sudo apt-get update -y
+    sudo apt-get install -y ca-certificates curl gnupg lsb-release
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
+      | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+    sudo apt-get update -y
+
+    echo "🧹 Removing old Docker packages (if any)..."
+    sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+
+    local PINNED_ENGINE=""
+    local PINNED_CLI=""
+    local PINNED_CONTAINERD="1.7.17-1"
+
+    case "${CODENAME}" in
+      jammy) 
+        PINNED_ENGINE="5:25.0.5-1~ubuntu.22.04~jammy"
+        PINNED_CLI="5:25.0.5-1~ubuntu.22.04~jammy"
+        ;;
+      noble)  
+        PINNED_ENGINE="5:25.0.5-1~ubuntu.24.04~noble"
+        PINNED_CLI="5:25.0.5-1~ubuntu.24.04~noble"
+        ;;
+      *)
+        echo "⚠️  Unknown codename: ${CODENAME}. Will install latest stable instead of pinned."
+        ;;
+    esac
+
+    echo "⬇️  Installing Docker Engine/CLI + containerd + compose plugin..."
+    if [[ -n "$PINNED_ENGINE" && -n "$PINNED_CLI" ]]; then
+        if ! sudo apt-get install -y \
+            docker-ce="${PINNED_ENGINE}" \
+            docker-ce-cli="${PINNED_CLI}" \
+            containerd.io="${PINNED_CONTAINERD}" \
+            docker-buildx-plugin docker-compose-plugin; then
+          echo "⚠️  Pinned versions not available for this codename. Installing latest stable..."
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        fi
+    else
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     fi
 
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-    sudo usermod -aG docker "$USER"
-    rm -f get-docker.sh
+    echo "🧾 Writing /etc/docker/daemon.json ..."
+    sudo mkdir -p /etc/docker
+    sudo tee /etc/docker/daemon.json >/dev/null <<'JSON'
+{
+  "storage-driver": "overlay2",
+  "max-concurrent-downloads": 6,
+  "max-concurrent-uploads": 4,
+  "log-driver": "local",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "features": {
+    "buildkit": true
+  }
+}
+JSON
 
-    echo -e "\n✅ Docker installation completed!"
-    echo "⚠️  Please log out and log in again for group changes to take effect."
+    echo "🔁 Enabling & starting Docker service..."
+    sudo systemctl enable docker || true
+    sudo systemctl daemon-reload || true
+    sudo systemctl restart docker
+    sleep 1
+    if systemctl is-active --quiet docker; then
+        echo "✅ Docker service is active."
+    else
+        echo "❌ Docker service is not active. Check: sudo journalctl -u docker -e"
+    fi
+
+    if [[ -n "${USER:-}" ]]; then
+        echo "👤 Adding current user to 'docker' group: $USER"
+        sudo usermod -aG docker "$USER" || true
+        echo "ℹ️  You may need to log out and log back in for group changes to take effect."
+    fi
+
+    echo -e "\n🔎 Versions:"
+    docker version || true
+    docker compose version || true
+    command -v containerd >/dev/null 2>&1 && containerd --version || true
+    command -v runc >/dev/null 2>&1 && runc --version || true
+
+    echo -e "\n🧪 Running hello-world smoke test..."
+    if docker run --rm hello-world >/dev/null 2>&1; then
+        echo "✅ Docker hello-world OK."
+    else
+        echo "⚠️  hello-world failed (network/proxy?). Try: docker run --rm -it ubuntu:24.04 echo OK"
+    fi
+
+    echo -e "\n🎉 Docker installation completed!"
 }
 
 while true; do

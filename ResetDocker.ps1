@@ -85,20 +85,154 @@ function Uninstall-Docker {
 }
 
 function Install-Docker {
-    Write-Host "`nInstalling Docker Desktop..."
-    
-    $dockerApp = winget list | Where-Object { $_ -match "Docker.DockerDesktop" }
-    if ($dockerApp) {
-        Write-Host "Docker Desktop is already installed."
+    [CmdletBinding()]
+    param(
+        [string] $WingetId = "Docker.DockerDesktop",
+        [string] $Channel = "Stable",                 
+        [string] $DesiredVersion = "",                
+        [switch] $SkipWSLSetup,                       
+        [switch] $SkipSettings,                      
+        [switch] $NoSmokeTest                       
+    )
+
+    Write-Host "`n[Install-Docker] Starting Docker Desktop installation for Windows..." -ForegroundColor Cyan
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal] `
+        [Security.Principal.WindowsIdentity]::GetCurrent()
+    ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Host "  ! Please run this in an elevated PowerShell (Run as Administrator)." -ForegroundColor Yellow
         return
     }
 
-    Write-Host "Starting installation via winget..."
-    winget install --id Docker.DockerDesktop -e --silent
-    Write-Host "Docker Desktop installation triggered. Please wait for completion."
+    $osv = [System.Environment]::OSVersion.Version
+    Write-Host ("  - Windows version: {0}" -f $osv)
+    if ($osv.Major -lt 10) {
+        Write-Host "  ! Requires Windows 10/11." -ForegroundColor Yellow
+        return
+    }
 
-    Write-Host "`nAfter installation, you may need to log out and log in again or restart your system."
+    if (-not $SkipWSLSetup) {
+        try {
+            Write-Host "  - Enabling Windows Subsystem for Linux (WSL) & Virtual Machine Platform..."
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart -All | Out-Null
+            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -All | Out-Null
+            wsl --set-default-version 2 | Out-Null
+            Write-Host "  - Updating WSL kernel (if supported)..."
+            try { wsl --update | Out-Null } catch { }
+        } catch {
+            Write-Host "  ! WSL setup encountered an issue: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  - Skipping WSL setup as requested."
+    }
+
+    $already = $false
+    try {
+        $ver = (Get-Command "C:\Program Files\Docker\Docker\Docker Desktop.exe" -ErrorAction SilentlyContinue)
+        if ($ver) { $already = $true }
+    } catch { }
+
+    if (-not $already) {
+        $wingetOk = $false
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            $wingetOk = $true
+            Write-Host "  - Installing Docker Desktop via winget..."
+            $args = @("install", "--id", $WingetId, "-e", "--silent")
+            if ($DesiredVersion) { $args += @("--version", $DesiredVersion) }
+            try {
+                winget @args
+            } catch {
+                Write-Host "  ! winget install failed: $($_.Exception.Message)" -ForegroundColor Yellow
+                $wingetOk = $false
+            }
+        }
+
+        if (-not $wingetOk) {
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+                Write-Host "  - Installing Docker Desktop via Chocolatey..."
+                try {
+                    if ($DesiredVersion) {
+                        choco install docker-desktop --version $DesiredVersion -y --no-progress
+                    } else {
+                        choco install docker-desktop -y --no-progress
+                    }
+                } catch {
+                    Write-Host "  ! choco install failed: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "  ! Neither winget nor choco available. Please install Docker Desktop manually from https://www.docker.com/products/docker-desktop" -ForegroundColor Yellow
+                return
+            }
+        }
+    } else {
+        Write-Host "  - Docker Desktop is already installed."
+    }
+
+    if (-not $SkipSettings) {
+        try {
+            $settingsDir = Join-Path $env:APPDATA "Docker"
+            $settingsFile = Join-Path $settingsDir "settings.json"
+            if (-not (Test-Path $settingsDir)) { New-Item -ItemType Directory -Path $settingsDir | Out-Null }
+
+            $desired = @{
+                "useWindowsContainers" = $false
+                "autoStart"            = $true
+                "wslEngineEnabled"     = $true
+                "kubernetesEnabled"    = $false
+                "exposeDockerAPI"      = $false
+            }
+
+            if (Test-Path $settingsFile) {
+                $current = Get-Content $settingsFile -Raw | ConvertFrom-Json
+                foreach ($k in $desired.Keys) {
+                    $current | Add-Member -NotePropertyName $k -NotePropertyValue $desired[$k] -Force
+                }
+                ($current | ConvertTo-Json -Depth 6) | Set-Content -Path $settingsFile -Encoding UTF8
+            } else {
+                ($desired | ConvertTo-Json -Depth 6) | Set-Content -Path $settingsFile -Encoding UTF8
+            }
+            Write-Host "  - Written Docker Desktop settings to $settingsFile"
+        } catch {
+            Write-Host "  ! Failed to write settings.json: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  - Skipping Docker Desktop settings as requested."
+    }
+
+    try {
+        Write-Host "  - Adding current user to 'docker-users' local group..."
+        $u = "$env:USERDOMAIN\$env:USERNAME"
+        if (-not (Get-LocalGroup -Name "docker-users" -ErrorAction SilentlyContinue)) {
+            New-LocalGroup -Name "docker-users" -ErrorAction SilentlyContinue | Out-Null
+        }
+        Add-LocalGroupMember -Group "docker-users" -Member $u -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "  ! Could not add user to docker-users: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    $dockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (Test-Path $dockerDesktopExe) {
+        Write-Host "  - Launching Docker Desktop..."
+        Start-Process -FilePath $dockerDesktopExe -ArgumentList "--accept-license" -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 6
+    } else {
+        Write-Host "  ! Docker Desktop executable not found at expected path." -ForegroundColor Yellow
+    }
+
+    if (-not $NoSmokeTest) {
+        Write-Host "  - Running hello-world smoke test (may require new sign-in for docker-users group)..."
+        try {
+            docker run --rm hello-world | Out-Null
+            Write-Host "Docker hello-world OK."
+        } catch {
+            Write-Host "hello-world test failed. If this is your first install, sign out/in (or reboot) and try again." -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host "`n[Install-Docker] Completed." -ForegroundColor Green
 }
+
 
 do {
     Clear-Host
