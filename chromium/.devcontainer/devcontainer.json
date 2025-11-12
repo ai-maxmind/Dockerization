@@ -1,0 +1,21 @@
+{
+  "name": "Chromium Docker Ultimate",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "chromium-dev",
+  "workspaceFolder": "/work",
+  "remoteUser": "builder",
+  "mounts": [
+    "source=${localWorkspaceFolder}/src,target=/work/src,type=bind",
+    "source=${localWorkspaceFolder}/ccache,target=/ccache,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "mhutchie.git-graph",
+        "eamodio.gitlens"
+      ]
+    }
+  }
+}

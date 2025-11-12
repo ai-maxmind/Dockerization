@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+cd src
+xvfb-run -a out/Default/chrome --no-first-run "$@"

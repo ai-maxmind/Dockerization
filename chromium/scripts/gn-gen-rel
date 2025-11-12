@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+cd src
+gn gen out/Rel --args='is_debug=false is_component_build=false use_jumbo_build=true cc_wrapper="ccache" symbol_level=1 enable_nacl=false'

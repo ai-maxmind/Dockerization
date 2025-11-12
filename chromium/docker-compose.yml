@@ -1,0 +1,43 @@
+services:
+  chromium-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: ${UID:-1000}
+        USER_GID: ${GID:-1000}
+    image: chromium-dev:ultimate
+    container_name: chromium-dev
+    working_dir: /work
+    environment:
+      - DISPLAY=${DISPLAY}
+      - CCACHE_DIR=/ccache
+      - CCACHE_MAXSIZE=50G
+    volumes:
+      - ./src:/work/src
+      - ./ccache:/ccache
+      - ./artifacts:/work/artifacts
+      - ./recordings:/work/recordings
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    shm_size: "4gb"
+    tty: true
+    stdin_open: true
+    profiles: ["dev"]
+
+  chromium-vnc:
+    extends: chromium-dev
+    container_name: chromium-vnc
+    profiles: ["vnc"]
+    ports:
+      - "6080:6080"
+      - "5900:5900"
+    command: ["/bin/bash", "-lc", "start-vnc"]
+
+  chromium-gpu:
+    extends: chromium-dev
+    container_name: chromium-gpu
+    profiles: ["gpu"]
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      - DISPLAY=${DISPLAY}

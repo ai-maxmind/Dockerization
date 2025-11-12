@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -e
+fetch --nohooks chromium && cd src && gclient sync -D --force --with_branch_heads --with_tags && ./build/install-build-deps.sh --no-prompt && gclient runhooks
