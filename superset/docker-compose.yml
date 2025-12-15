@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: superset_redis
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    container_name: superset_keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    command: start-dev
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    container_name: superset_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  superset:
+    image: apache/superset:4.0.0
+    container_name: superset_app
+    environment:
+      SUPERSET_ENV: ${SUPERSET_ENV}
+      SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      MAPBOX_API_KEY: ${MAPBOX_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "${SUPERSET_PORT}:8088"
+    volumes:
+      - ./superset:/app/pythonpath
+    command:
+      [
+        "/bin/bash",
+        "-c",
+        "superset db upgrade &&
+         superset fab create-admin --username ${ADMIN_USERNAME} --firstname ${ADMIN_FIRST_NAME} --lastname ${ADMIN_LAST_NAME} --email ${ADMIN_EMAIL} --password ${ADMIN_PASSWORD} &&
+         gunicorn -w 3 -k gevent --timeout 120 -b 0.0.0.0:8088 'superset.app:create_app()'"
+      ]
+    restart: unless-stopped
+
+  superset-worker:
+    image: apache/superset:4.0.0
+    container_name: superset_worker
+    depends_on:
+      - superset
+      - redis
+    volumes:
+      - ./superset:/app/pythonpath
+    command: celery --app=superset.tasks.celery_app:app worker -O fair -l INFO
+    restart: unless-stopped
+
+  superset-worker-beat:
+    image: apache/superset:4.0.0
+    container_name: superset_beat
+    depends_on:
+      - superset
+      - redis
+    volumes:
+      - ./superset:/app/pythonpath
+    command: celery --app=superset.tasks.celery_app:app beat -l INFO
+    restart: unless-stopped
+
+volumes:
+  db_data:
